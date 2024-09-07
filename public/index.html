@@ -79,7 +79,6 @@
       let mouseX = canvas.width / 2;
       let mouseY = canvas.height / 2;
       const rotationSpeed = 0.15; // Velocidade de rotação ao redor do ponto do mouse
-      let lastUpdate = Date.now();
 
       // Captura a posição do mouse para controle do jogador
       canvas.addEventListener("mousemove", (event) => {
@@ -199,7 +198,7 @@
       });
 
       // Função para atualizar o movimento do jogador
-      function updatePlayerMovement(deltaTime) {
+      function updatePlayerMovement() {
         for (let id in players) {
           const player = players[id];
           if (id === socket.id) {
@@ -233,11 +232,8 @@
         }
       }
 
-      function gameLoop(currentTime) {
-        const deltaTime = currentTime - lastUpdate;
-        lastUpdate = currentTime;
-
-        updatePlayerMovement(deltaTime);
+      function gameLoop() {
+        updatePlayerMovement();
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
