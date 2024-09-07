@@ -1,6 +1,7 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
+const path = require("path");
 
 const app = express();
 const server = http.createServer(app);
@@ -15,7 +16,8 @@ const appleRadius = 5;
 const particleRadius = 2;
 
 // Servir arquivos estáticos (HTML, CSS, JS) da pasta 'public'
-app.use(express.static("public"));
+// app.use(express.static("public"));
+app.use(express.static(path.join(__dirname, "public")));
 
 // Gera uma maçã aleatória
 function generateApple() {
