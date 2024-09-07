@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Snake.io</title>
+    <style>
+      @font-face {
+        font-family: "monogram";
+        src: url("monogram.ttf") format("truetype");
+      }
+
+      body {
+        background-color: lightgray;
+        font-family: "monogram";
+      }
+      canvas {
+        background-color: #000;
+        display: block;
+        margin: 0 auto;
+      }
+      #scoreboard {
+        color: white;
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 10px;
+        border-radius: 5px;
+        max-width: 200px;
+        font-size: 25px;
+      }
+      #nameInput {
+        position: absolute;
+        top: 55px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 5px;
+        border-radius: 5px;
+        color: white;
+      }
+
+      #playerName {
+        font-family: "monogram";
+        border: none;
+        padding: 5px;
+        outline: 0;
+        border-radius: 5px;
+        font-size: 20px;
+      }
+
+      #setName {
+        font-family: "monogram";
+        padding: 5px;
+        border: none;
+        outline: 0;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="scoreboard">Loading scores...</div>
+    <div id="nameInput">
+      <input type="text" id="playerName" placeholder="Enter your name" />
+      <button id="setName">Set Name</button>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+      let socket;
+
+      let players = {};
+      let apples = [];
+      let particles = [];
+      let mouseX = canvas.width / 2;
+      let mouseY = canvas.height / 2;
+      const rotationSpeed = 0.15; // Velocidade de rotação ao redor do ponto do mouse
+
+      // Captura a posição do mouse para controle do jogador
+      canvas.addEventListener("mousemove", (event) => {
+        const rect = canvas.getBoundingClientRect();
+        mouseX = event.clientX - rect.left;
+        mouseY = event.clientY - rect.top;
+      });
+
+      // Configura o nome do jogador
+      document.getElementById("setName").addEventListener("click", () => {
+        const name = document.getElementById("playerName").value;
+        if (name) {
+          // Cria a conexão com o servidor somente após o nome ser definido
+          socket = io();
+          socket.on("currentPlayers", (serverPlayers) => {
+            players = serverPlayers;
+            updateScoreboard();
+          });
+
+          socket.on("currentApples", (serverApples) => {
+            apples = serverApples;
+          });
+
+          socket.on("currentParticles", (serverParticles) => {
+            particles = serverParticles;
+          });
+
+          socket.on("newPlayer", (player) => {
+            players[player.id] = player;
+            updateScoreboard();
+          });
+
+          socket.on("playerDisconnected", (id) => {
+            delete players[id];
+            updateScoreboard();
+          });
+
+          socket.on("playerDead", (data) => {
+            delete players[data.id];
+            particles = particles.concat(data.particles); // Adiciona as partículas do jogador morto
+            updateScoreboard();
+          });
+
+          socket.on("updateScores", (updatedPlayers) => {
+            players = updatedPlayers;
+            updateScoreboard();
+          });
+
+          socket.on(
+            "gameState",
+            (serverPlayers, serverApples, serverParticles) => {
+              players = serverPlayers;
+              apples = serverApples;
+              particles = serverParticles; // Atualiza o estado das partículas
+              updateScoreboard();
+            }
+          );
+
+          socket.emit("setName", name);
+          // Esconde o campo de nome após a configuração
+          document.getElementById("nameInput").style.display = "none";
+        }
+      });
+
+      function updateScoreboard() {
+        const scoreboard = document.getElementById("scoreboard");
+        scoreboard.innerHTML = "<h3>Scoreboard</h3>";
+
+        const sortedPlayers = Object.values(players).sort(
+          (a, b) => b.score - a.score
+        );
+
+        sortedPlayers.forEach((player) => {
+          if (player.name) {
+            scoreboard.innerHTML += `<p>${player.name || "Player"}: ${
+              player.score || 0
+            }</p>`;
+          }
+        });
+      }
+
+      function drawPlayers() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (let id in players) {
+          const player = players[id];
+          ctx.fillStyle = player.color || "#00FF00";
+          player.snake.forEach((segment) => {
+            ctx.beginPath();
+            ctx.arc(segment.x, segment.y, 5, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
+      }
+
+      function drawApples() {
+        ctx.fillStyle = "green";
+        apples.forEach((apple) => {
+          ctx.beginPath();
+          ctx.arc(apple.x, apple.y, 5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
+
+      function drawParticles() {
+        particles.forEach((particle) => {
+          ctx.fillStyle = particle.color;
+          ctx.beginPath();
+          ctx.arc(particle.x, particle.y, 2, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
+
+      document.addEventListener("keydown", (event) => {
+        if (event.code === "Space") {
+          socket.emit("playerBoost");
+        }
+      });
+
+      // Função para atualizar o movimento do jogador
+      function updatePlayerMovement() {
+        for (let id in players) {
+          const player = players[id];
+          if (id === socket.id) {
+            const dx = mouseX - player.snake[0].x;
+            const dy = mouseY - player.snake[0].y;
+            const targetAngle = Math.atan2(dy, dx);
+            const diff = targetAngle - player.angle;
+            player.angle +=
+              Math.atan2(Math.sin(diff), Math.cos(diff)) * rotationSpeed;
+
+            // Verifica se o jogador está usando impulso
+            const speed = player.boost ? 4 : 2; // Aumenta a velocidade durante o impulso
+            socket.emit("playerMovement", {
+              angle: player.angle,
+              speed: speed,
+            });
+          } else {
+            // Interpolação linear para suavizar o movimento dos outros jogadores
+            if (player.lastUpdate) {
+              const now = Date.now();
+              const dt = (now - player.lastUpdate) / 1000; // tempo em segundos
+              const speed = player.speed || 2; // velocidade do jogador
+
+              player.snake.forEach((segment) => {
+                segment.x += speed * dt * Math.cos(player.angle);
+                segment.y += speed * dt * Math.sin(player.angle);
+              });
+            }
+            player.lastUpdate = Date.now();
+          }
+        }
+      }
+
+      function gameLoop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        updatePlayerMovement();
+        drawPlayers();
+        drawApples();
+        drawParticles();
+        requestAnimationFrame(gameLoop);
+      }
+
+      gameLoop();
+    </script>
+  </body>
+</html>
