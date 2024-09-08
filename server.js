@@ -10,9 +10,10 @@ const io = new Server(server);
 const players = {};
 const apples = [];
 let particles = [];
-const canvasWidth = 800;
+const canvasWidth = 950;
 const canvasHeight = 600;
-const appleRadius = 5;
+
+const appleRadius = 3.2;
 const particleRadius = 2;
 
 // Servir arquivos estáticos (HTML, CSS, JS) da pasta 'public'
@@ -25,11 +26,12 @@ function generateApple() {
     x: Math.random() * canvasWidth,
     y: Math.random() * canvasHeight,
     id: Math.random().toString(36).substring(7), // ID único para cada maçã
+    color: "#" + Math.floor(Math.random() * 16777215).toString(16),
   };
 }
 
 // Adiciona maçãs iniciais
-for (let i = 0; i < 50; i++) {
+for (let i = 0; i < 300; i++) {
   apples.push(generateApple());
 }
 
@@ -39,7 +41,7 @@ function generateParticle(x, y, color) {
     x: x,
     y: y,
     color: color,
-    lifespan: 500, // Ajuste a duração conforme necessário
+    lifespan: 300, // Ajuste a duração conforme necessário
   };
 }
 
@@ -50,14 +52,15 @@ function handlePlayerDeath(playerId) {
     // Cria partículas na posição da cabeça do jogador com deslocamento aleatório
     const particlesToAdd = [];
     player.snake.forEach((segment) => {
-      let particlesBySegment = 2;
+      let particlesBySegment = 1;
       for (let i = 0; i < particlesBySegment; i++) {
         // Gera partículas por segmento
         particlesToAdd.push(
           generateParticle(
             segment.x + Math.random() * 20 - 10, // Adiciona deslocamento aleatório no eixo x
             segment.y + Math.random() * 20 - 10, // Adiciona deslocamento aleatório no eixo y
-            player.color
+            "#" + Math.floor(Math.random() * 16777215).toString(16)
+            // player.color
           )
         );
       }
@@ -109,7 +112,7 @@ io.on("connection", (socket) => {
     color: "#" + Math.floor(Math.random() * 16777215).toString(16), // Gera uma cor aleatória
     score: 0, // Inicializa a pontuação
     name: null, // Nome do jogador (inicialmente indefinido),
-    speed: 2,
+    speed: 2.5,
     boost: false,
   };
 
@@ -142,6 +145,14 @@ io.on("connection", (socket) => {
     const player = players[socket.id];
     if (player) {
       player.boost = true;
+      // vai perder massa durante 1 segundo de boost
+      if (player.boost) {
+        // console.log(player);
+        if (player.snake.length > 5) {
+          player.snake.splice(player.snakeLength - 1, 1);
+          player.snakeLength--;
+        }
+      }
       setTimeout(() => {
         player.boost = false; // Remove o impulso após 1 segundo
       }, 1000);
@@ -156,8 +167,13 @@ io.on("connection", (socket) => {
   });
 });
 
-// Atualiza o estado do jogo em intervalos regulares
-setInterval(() => {
+let lastUpdateTime = Date.now();
+
+function gameLoop() {
+  const now = Date.now();
+  const dt = (now - lastUpdateTime) / 1000; // Tempo em segundos
+  lastUpdateTime = now;
+
   // Atualiza a posição de cada cobra
   for (let id in players) {
     const player = players[id];
@@ -222,7 +238,12 @@ setInterval(() => {
   // Envia o estado do jogo para todos os clientes
   io.emit("gameState", players, apples, particles);
   updateScores();
-}, 1000 / 60); // Atualiza 60 vezes por segundo
+
+  // Atualiza o estado do jogo em intervalos regulares
+  setTimeout(gameLoop, 1000 / 60); // Atualiza 60 vezes por segundo
+}
+
+gameLoop();
 
 server.listen(3000, () => {
   console.log("Servidor ouvindo na porta 3000");

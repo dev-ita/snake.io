@@ -18,6 +18,8 @@
         background-color: #000;
         display: block;
         margin: 0 auto;
+        margin-right: 100px;
+        border-radius: 10px;
       }
       #scoreboard {
         color: white;
@@ -38,6 +40,9 @@
         padding: 5px;
         border-radius: 5px;
         color: white;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
       }
 
       #playerName {
@@ -57,20 +62,28 @@
         border-radius: 5px;
         cursor: pointer;
         font-size: 20px;
+        background-color: #00e676;
+        width: 100%;
       }
     </style>
   </head>
   <body>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <canvas id="gameCanvas" width="950" height="600"></canvas>
     <div id="scoreboard">Loading scores...</div>
     <div id="nameInput">
-      <input type="text" id="playerName" placeholder="Enter your name" />
-      <button id="setName">Set Name</button>
+      <input
+        type="text"
+        id="playerName"
+        placeholder="Enter your name"
+        maxlength="10"
+      />
+      <button id="setName">Play</button>
     </div>
     <script src="/socket.io/socket.io.js"></script>
     <script>
       const canvas = document.getElementById("gameCanvas");
       const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
       let socket;
 
       let players = {};
@@ -146,6 +159,7 @@
       function updateScoreboard() {
         const scoreboard = document.getElementById("scoreboard");
         scoreboard.innerHTML = "<h3>Scoreboard</h3>";
+        scoreboard.style.height = "500px";
 
         const sortedPlayers = Object.values(players).sort(
           (a, b) => b.score - a.score
@@ -153,9 +167,13 @@
 
         sortedPlayers.forEach((player) => {
           if (player.name) {
-            scoreboard.innerHTML += `<p>${player.name || "Player"}: ${
-              player.score || 0
-            }</p>`;
+            // Cria um bloco colorido usando um elemento <span> antes do nome do jogador
+            scoreboard.innerHTML += `<p>
+              <span style="display: inline-block; width: 10px; height: 10px; background-color: ${
+                player.color
+              }; margin-right: 5px;"></span>
+              ${player.name || "Player"}: ${player.score || 0}
+            </p>`;
           }
         });
       }
@@ -174,10 +192,14 @@
       }
 
       function drawApples() {
-        ctx.fillStyle = "green";
+        // ctx.fillStyle = "#FF1744";
+        ctx.fillStyle = "#FFF";
         apples.forEach((apple) => {
+          // ctx.fillStyle = apple.color;
+          const appleRadius = 3.2;
+
           ctx.beginPath();
-          ctx.arc(apple.x, apple.y, 5, 0, Math.PI * 2);
+          ctx.arc(apple.x, apple.y, appleRadius, 0, Math.PI * 2);
           ctx.fill();
         });
       }
@@ -185,23 +207,38 @@
       function drawParticles() {
         particles.forEach((particle) => {
           ctx.fillStyle = particle.color;
+          const particleRadius = 2;
           ctx.beginPath();
-          ctx.arc(particle.x, particle.y, 2, 0, Math.PI * 2);
+          ctx.arc(particle.x, particle.y, particleRadius, 0, Math.PI * 2);
           ctx.fill();
         });
       }
 
+      let spacePressed = false;
+
       document.addEventListener("keydown", (event) => {
         if (event.code === "Space") {
-          socket.emit("playerBoost");
+          if (!spacePressed) {
+            spacePressed = true;
+            console.log("space");
+            socket.emit("playerBoost");
+          }
         }
       });
 
-      // Função para atualizar o movimento do jogador
+      document.addEventListener("keyup", (event) => {
+        if (event.code === "Space") {
+          spacePressed = false;
+        }
+      });
+
       function updatePlayerMovement() {
+        const snakeSpeed = 2.5;
+
         for (let id in players) {
           const player = players[id];
           if (id === socket.id) {
+            // Movimento do jogador local
             const dx = mouseX - player.snake[0].x;
             const dy = mouseY - player.snake[0].y;
             const targetAngle = Math.atan2(dy, dx);
@@ -209,18 +246,17 @@
             player.angle +=
               Math.atan2(Math.sin(diff), Math.cos(diff)) * rotationSpeed;
 
-            // Verifica se o jogador está usando impulso
-            const speed = player.boost ? 4 : 2; // Aumenta a velocidade durante o impulso
+            const speed = player.boost ? 4 : snakeSpeed;
             socket.emit("playerMovement", {
               angle: player.angle,
               speed: speed,
             });
           } else {
-            // Interpolação linear para suavizar o movimento dos outros jogadores
+            // Interpolação para outros jogadores
             if (player.lastUpdate) {
               const now = Date.now();
-              const dt = (now - player.lastUpdate) / 1000; // tempo em segundos
-              const speed = player.speed || 2; // velocidade do jogador
+              const dt = (now - player.lastUpdate) / 1000;
+              const speed = player.speed || snakeSpeed;
 
               player.snake.forEach((segment) => {
                 segment.x += speed * dt * Math.cos(player.angle);
@@ -233,10 +269,9 @@
       }
 
       function gameLoop() {
-        updatePlayerMovement();
-
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        updatePlayerMovement();
         drawPlayers();
         drawApples();
         drawParticles();
